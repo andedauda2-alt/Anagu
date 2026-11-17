@@ -1,0 +1,446 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Hardened Primitives ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'andedauda2@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isVerifiedUser() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function hasUserProfile() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isOfficial() {
+      return isVerifiedUser() &&
+        hasUserProfile() &&
+        getUserRole() in ['SURVEYOR', 'LAND_ADMIN', 'REGISTRAR', 'GOVERNOR'];
+    }
+
+    function isOfficialOrAdmin() {
+      return isAdmin() || isOfficial();
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUser(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'role', 'requestedRole', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'photoURL', 'role', 'requestedRole', 'walletAddress', 'createdAt', 'updatedAt']) &&
+        data.uid is string && isValidId(data.uid) && data.uid == userId &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500)) &&
+        data.role in ['CITIZEN', 'SURVEYOR', 'LAND_ADMIN', 'REGISTRAR', 'GOVERNOR'] &&
+        data.requestedRole in ['NONE', 'CITIZEN', 'SURVEYOR', 'LAND_ADMIN', 'REGISTRAR', 'GOVERNOR'] &&
+        (!('walletAddress' in data) || (data.walletAddress is string && data.walletAddress.size() <= 64)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserPii(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'phone', 'address', 'nin', 'updatedAt']) &&
+        data.uid is string && isValidId(data.uid) && data.uid == userId &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 40)) &&
+        (!('address' in data) || (data.address is string && data.address.size() <= 240)) &&
+        (!('nin' in data) || (data.nin is string && data.nin.size() <= 40)) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidParcel(data, parcelId) {
+      return data.keys().hasAll([
+          'id', 'titleNumber', 'applicantUid', 'applicantName', 'applicantIdMasked',
+          'applicantWalletAddress', 'locationName', 'lga', 'state', 'coordinates',
+          'areaSqm', 'perimeterMeters', 'spatialHash', 'documentHash', 'landUse',
+          'deedReference', 'customaryClan', 'communityElderAttestation', 'status',
+          'isRevoked', 'timeline', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'titleNumber', 'applicantUid', 'applicantName', 'applicantIdMasked',
+          'applicantWalletAddress', 'locationName', 'lga', 'state', 'coordinates',
+          'areaSqm', 'perimeterMeters', 'spatialHash', 'documentHash', 'landUse',
+          'deedReference', 'customaryClan', 'communityElderAttestation', 'status',
+          'rejectionReason', 'nftTokenId', 'blockchainTxHash', 'isRevoked',
+          'revocationData', 'documentAttachment', 'surveyBeacons', 'signatureProof',
+          'timeline', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && isValidId(data.id) && data.id == parcelId &&
+        data.titleNumber is string && data.titleNumber.size() >= 3 && data.titleNumber.size() <= 64 &&
+        data.applicantUid is string && isValidId(data.applicantUid) &&
+        data.applicantName is string && data.applicantName.size() >= 2 && data.applicantName.size() <= 120 &&
+        data.applicantIdMasked is string && data.applicantIdMasked.size() >= 2 && data.applicantIdMasked.size() <= 32 &&
+        data.applicantWalletAddress is string && data.applicantWalletAddress.size() >= 10 && data.applicantWalletAddress.size() <= 64 &&
+        data.locationName is string && data.locationName.size() >= 2 && data.locationName.size() <= 160 &&
+        data.lga is string && data.lga.size() >= 2 && data.lga.size() <= 80 &&
+        data.state is string && data.state.size() >= 2 && data.state.size() <= 40 &&
+        data.coordinates is list && data.coordinates.size() >= 3 && data.coordinates.size() <= 200 &&
+        data.coordinates[0] is map && data.coordinates[0].lng is number && data.coordinates[0].lat is number &&
+        data.areaSqm is number && data.areaSqm >= 0 &&
+        data.perimeterMeters is number && data.perimeterMeters >= 0 &&
+        data.spatialHash is string && data.spatialHash.size() >= 10 && data.spatialHash.size() <= 128 &&
+        data.documentHash is string && data.documentHash.size() >= 10 && data.documentHash.size() <= 128 &&
+        data.landUse in ['Residential', 'Commercial', 'Agricultural', 'Industrial', 'Public Reserve'] &&
+        data.deedReference is string && data.deedReference.size() >= 3 && data.deedReference.size() <= 80 &&
+        data.customaryClan is string && data.customaryClan.size() >= 2 && data.customaryClan.size() <= 120 &&
+        data.communityElderAttestation is string && data.communityElderAttestation.size() >= 2 && data.communityElderAttestation.size() <= 300 &&
+        data.status in ['DRAFT', 'SUBMITTED', 'SPATIAL_VERIFIED', 'ORACLE_VERIFIED', 'LEGAL_VERIFIED', 'APPROVED', 'BLOCKCHAIN_CONFIRMED', 'NFT_ISSUED', 'REVOKED', 'REJECTED', 'CANCELLED'] &&
+        data.isRevoked is bool &&
+        data.timeline is list && data.timeline.size() >= 1 && data.timeline.size() <= 20 &&
+        data.timeline[0] is map && data.timeline[0].id is string && data.timeline[0].id.size() <= 64 &&
+        data.timeline[0].stage is string && data.timeline[0].stage.size() <= 120 &&
+        data.createdAt is timestamp && data.updatedAt is timestamp &&
+        (!('rejectionReason' in data) || (data.rejectionReason is string && data.rejectionReason.size() <= 500)) &&
+        (!('nftTokenId' in data) || (data.nftTokenId is number && data.nftTokenId > 0)) &&
+        (!('blockchainTxHash' in data) || (data.blockchainTxHash is string && data.blockchainTxHash.size() <= 128)) &&
+        (!('revocationData' in data) || (
+          data.revocationData is map &&
+          data.revocationData.ground in ['OverridingPublicInterest', 'BreachOfStatutoryCondition'] &&
+          data.revocationData.revokedBy is string && data.revocationData.revokedBy.size() <= 120 &&
+          data.revocationData.reasonDetail is string && data.revocationData.reasonDetail.size() <= 500
+        )) &&
+        (!('documentAttachment' in data) || (
+          data.documentAttachment is map &&
+          data.documentAttachment.fileName is string && data.documentAttachment.fileName.size() <= 200 &&
+          data.documentAttachment.sha256 is string && data.documentAttachment.sha256.size() <= 128
+        )) &&
+        (!('surveyBeacons' in data) || (
+          data.surveyBeacons is list && data.surveyBeacons.size() <= 100 &&
+          (data.surveyBeacons.size() == 0 || (data.surveyBeacons[0] is map && data.surveyBeacons[0].lng is number && data.surveyBeacons[0].lat is number))
+        )) &&
+        (!('signatureProof' in data) || (
+          data.signatureProof is map &&
+          data.signatureProof.signerAddress is string && data.signatureProof.signerAddress.size() <= 64 &&
+          data.signatureProof.signature is string && data.signatureProof.signature.size() <= 512
+        ));
+    }
+
+    function isValidParcelPii(data) {
+      return data.keys().hasAll(['applicantUid', 'applicantIdNumber', 'applicantAddress', 'applicantPhone', 'updatedAt']) &&
+        data.keys().hasOnly(['applicantUid', 'applicantIdNumber', 'applicantAddress', 'applicantPhone', 'updatedAt']) &&
+        data.applicantUid is string && isValidId(data.applicantUid) &&
+        data.applicantIdNumber is string && data.applicantIdNumber.size() >= 2 && data.applicantIdNumber.size() <= 64 &&
+        data.applicantAddress is string && data.applicantAddress.size() >= 2 && data.applicantAddress.size() <= 240 &&
+        data.applicantPhone is string && data.applicantPhone.size() >= 3 && data.applicantPhone.size() <= 40 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidQueueIndex(data) {
+      return data.keys().hasAll(['parcelIds', 'updatedAt']) &&
+        data.keys().hasOnly(['parcelIds', 'updatedAt']) &&
+        data.parcelIds is list && data.parcelIds.size() <= 500 &&
+        (data.parcelIds.size() == 0 || (data.parcelIds[0] is string && data.parcelIds[0].size() <= 128)) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidLedgerEvent(data, eventId) {
+      return data.keys().hasAll([
+          'id', 'parcelId', 'titleNumber', 'tokenId', 'method',
+          'txHash', 'blockNumber', 'actorUid', 'isPublicLedger', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'parcelId', 'titleNumber', 'tokenId', 'method',
+          'txHash', 'blockNumber', 'actorUid', 'isPublicLedger', 'createdAt'
+        ]) &&
+        data.id is string && isValidId(data.id) && data.id == eventId &&
+        data.parcelId is string && isValidId(data.parcelId) &&
+        data.titleNumber is string && data.titleNumber.size() >= 3 && data.titleNumber.size() <= 64 &&
+        data.tokenId is number && data.tokenId > 0 &&
+        data.method in ['MINT_TITLE_NFT', 'REVOKE_TITLE_SEC28', 'TRANSFER_TITLE_NFT'] &&
+        data.txHash is string && data.txHash.size() >= 10 && data.txHash.size() <= 128 &&
+        data.blockNumber is number && data.blockNumber >= 0 &&
+        data.actorUid is string && isValidId(data.actorUid) &&
+        data.isPublicLedger is bool && data.isPublicLedger == true &&
+        data.createdAt is timestamp;
+    }
+
+    // --- Collection: /admins/{adminId} ---
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create, update, delete: if isBootstrappedAdmin() && isValidId(adminId);
+    }
+
+    // --- Collection: /users/{userId} ---
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isSignedIn() && (existing().uid == request.auth.uid || isBootstrappedAdmin());
+
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        request.auth.uid == userId &&
+        isValidUser(incoming(), userId) &&
+        (incoming().role == 'CITIZEN' || isAdmin()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidUser(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            request.auth.uid == userId &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'requestedRole', 'walletAddress', 'updatedAt'])
+          ) ||
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['role', 'requestedRole', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+
+      // Isolated PII subcollection: /users/{userId}/private/{docId}
+      match /private/{docId} {
+        allow get: if isSignedIn() && isValidId(userId) && docId == 'contact' &&
+          (request.auth.uid == userId || isAdmin()) &&
+          exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if false;
+        allow create, update: if isVerifiedUser() &&
+          isValidId(userId) &&
+          docId == 'contact' &&
+          request.auth.uid == userId &&
+          existsAfter(/databases/$(database)/documents/users/$(userId)) &&
+          isValidUserPii(incoming(), userId) &&
+          incoming().updatedAt == request.time;
+        allow delete: if false;
+      }
+    }
+
+    // --- Collection: /parcels/{parcelId} ---
+    match /parcels/{parcelId} {
+      allow get: if isSignedIn() && isValidId(parcelId) && (
+        existing().status in ['NFT_ISSUED', 'REVOKED'] ||
+        existing().applicantUid == request.auth.uid ||
+        isOfficialOrAdmin()
+      );
+
+      allow list: if isSignedIn() && (
+        existing().status in ['NFT_ISSUED', 'REVOKED'] ||
+        existing().applicantUid == request.auth.uid ||
+        isBootstrappedAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(parcelId) &&
+        isValidParcel(incoming(), parcelId) &&
+        incoming().applicantUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        incoming().isRevoked == false &&
+        (
+          (
+            incoming().status == 'SUBMITTED' &&
+            !('nftTokenId' in incoming()) &&
+            !('blockchainTxHash' in incoming()) &&
+            !('revocationData' in incoming()) &&
+            !('rejectionReason' in incoming())
+          ) ||
+          (isAdmin() && incoming().status in ['SUBMITTED', 'SPATIAL_VERIFIED', 'NFT_ISSUED'])
+        );
+
+      allow update: if isVerifiedUser() &&
+        isValidId(parcelId) &&
+        isValidParcel(incoming(), parcelId) &&
+        incoming().id == existing().id &&
+        incoming().applicantUid == existing().applicantUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (!(existing().status in ['REVOKED', 'REJECTED', 'CANCELLED']) || isAdmin()) &&
+        (
+          // Action 1: Spatial GIS Verification (Surveyor / Land Admin / Admin)
+          (
+            existing().status == 'SUBMITTED' &&
+            (isAdmin() || getUserRole() in ['SURVEYOR', 'LAND_ADMIN']) &&
+            incoming().status in ['SPATIAL_VERIFIED', 'REJECTED'] &&
+            incoming().isRevoked == false &&
+            (incoming().status == 'REJECTED' || !('rejectionReason' in incoming())) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'rejectionReason', 'timeline', 'updatedAt'])
+          ) ||
+          // Action 2: Community Oracle Verification (Land Admin / Surveyor / Registrar / Admin)
+          (
+            existing().status == 'SPATIAL_VERIFIED' &&
+            (isAdmin() || getUserRole() in ['LAND_ADMIN', 'SURVEYOR', 'REGISTRAR']) &&
+            incoming().status in ['ORACLE_VERIFIED', 'SUBMITTED', 'REJECTED'] &&
+            incoming().isRevoked == false &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'rejectionReason', 'timeline', 'updatedAt'])
+          ) ||
+          // Action 3: Legal Deeds Review (Registrar / Land Admin / Admin)
+          (
+            existing().status == 'ORACLE_VERIFIED' &&
+            (isAdmin() || getUserRole() in ['REGISTRAR', 'LAND_ADMIN']) &&
+            incoming().status == 'LEGAL_VERIFIED' &&
+            incoming().isRevoked == false &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'timeline', 'updatedAt'])
+          ) ||
+          // Action 4: Registrar Statutory Approval (Registrar / Admin)
+          (
+            existing().status == 'LEGAL_VERIFIED' &&
+            (isAdmin() || getUserRole() == 'REGISTRAR') &&
+            incoming().status == 'APPROVED' &&
+            incoming().isRevoked == false &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'timeline', 'updatedAt'])
+          ) ||
+          // Action 5: Mint ERC-721 Title NFT (Registrar / Land Admin / Admin)
+          (
+            existing().status == 'APPROVED' &&
+            (isAdmin() || getUserRole() in ['REGISTRAR', 'LAND_ADMIN']) &&
+            incoming().status == 'NFT_ISSUED' &&
+            incoming().isRevoked == false &&
+            incoming().nftTokenId is number &&
+            incoming().blockchainTxHash is string &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'nftTokenId', 'blockchainTxHash', 'timeline', 'updatedAt'])
+          ) ||
+          // Action 6: Section 28 Statutory Revocation (Exclusive Governor / Admin)
+          (
+            existing().status == 'NFT_ISSUED' &&
+            existing().isRevoked == false &&
+            (isAdmin() || getUserRole() == 'GOVERNOR') &&
+            incoming().status == 'REVOKED' &&
+            incoming().isRevoked == true &&
+            incoming().revocationData is map &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'isRevoked', 'revocationData', 'timeline', 'updatedAt'])
+          ) ||
+          // Action 7: Applicant Withdrawal / Cancellation (Owner before NFT issuance)
+          (
+            existing().applicantUid == request.auth.uid &&
+            existing().status in ['SUBMITTED', 'SPATIAL_VERIFIED', 'ORACLE_VERIFIED', 'LEGAL_VERIFIED', 'APPROVED'] &&
+            incoming().status == 'CANCELLED' &&
+            incoming().isRevoked == false &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'timeline', 'updatedAt'])
+          ) ||
+          // Action 8: Registry-Controlled Title Transfer (Registrar / Land Admin / Admin on active NFT)
+          (
+            existing().status == 'NFT_ISSUED' &&
+            existing().isRevoked == false &&
+            (isAdmin() || getUserRole() in ['REGISTRAR', 'LAND_ADMIN']) &&
+            incoming().status == 'NFT_ISSUED' &&
+            incoming().isRevoked == false &&
+            incoming().nftTokenId == existing().nftTokenId &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['applicantName', 'applicantIdMasked', 'applicantWalletAddress', 'blockchainTxHash', 'timeline', 'updatedAt'])
+          ) ||
+          // Admin Administrative Override
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['applicantName', 'applicantIdMasked', 'applicantWalletAddress', 'status', 'rejectionReason', 'nftTokenId', 'blockchainTxHash', 'isRevoked', 'revocationData', 'timeline', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+
+      // Isolated Applicant PII subcollection: /parcels/{parcelId}/private/{docId}
+      match /private/{docId} {
+        allow get: if isSignedIn() && isValidId(parcelId) && docId == 'applicant' && (
+          get(/databases/$(database)/documents/parcels/$(parcelId)).data.applicantUid == request.auth.uid ||
+          isOfficialOrAdmin()
+        );
+        allow list: if false;
+        allow create: if isVerifiedUser() &&
+          isValidId(parcelId) &&
+          docId == 'applicant' &&
+          isValidParcelPii(incoming()) &&
+          incoming().applicantUid == request.auth.uid &&
+          incoming().updatedAt == request.time &&
+          getAfter(/databases/$(database)/documents/parcels/$(parcelId)).data.applicantUid == request.auth.uid;
+        allow update: if isVerifiedUser() &&
+          isValidId(parcelId) &&
+          docId == 'applicant' &&
+          isValidParcelPii(incoming()) &&
+          incoming().applicantUid == existing().applicantUid &&
+          incoming().updatedAt == request.time &&
+          (get(/databases/$(database)/documents/parcels/$(parcelId)).data.applicantUid == request.auth.uid || isAdmin());
+        allow delete: if false;
+      }
+    }
+
+    // --- Collection: /registry/{docId} (Pending Official Queue Index) ---
+    match /registry/{docId} {
+      allow get: if isSignedIn() && docId == 'pendingQueue' && isOfficialOrAdmin();
+      allow list: if false;
+
+      allow create: if isVerifiedUser() &&
+        docId == 'pendingQueue' &&
+        isValidQueueIndex(incoming()) &&
+        incoming().parcelIds.size() <= 10 &&
+        incoming().updatedAt == request.time &&
+        (
+          incoming().parcelIds.size() == 0 ||
+          existsAfter(/databases/$(database)/documents/parcels/$(incoming().parcelIds[0]))
+        );
+
+      allow update: if isVerifiedUser() &&
+        docId == 'pendingQueue' &&
+        isValidQueueIndex(incoming()) &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['parcelIds', 'updatedAt']) &&
+        (
+          isOfficialOrAdmin() ||
+          (
+            incoming().parcelIds.hasAll(existing().parcelIds) &&
+            incoming().parcelIds.size() <= existing().parcelIds.size() + 1 &&
+            (
+              incoming().parcelIds.size() == existing().parcelIds.size() ||
+              existsAfter(/databases/$(database)/documents/parcels/$(incoming().parcelIds[incoming().parcelIds.size() - 1]))
+            )
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // --- Collection: /ledgerEvents/{eventId} ---
+    match /ledgerEvents/{eventId} {
+      allow get: if isSignedIn() && isValidId(eventId);
+      allow list: if isSignedIn() && existing().isPublicLedger == true;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(eventId) &&
+        isValidLedgerEvent(incoming(), eventId) &&
+        incoming().actorUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        isOfficialOrAdmin() &&
+        existsAfter(/databases/$(database)/documents/parcels/$(incoming().parcelId));
+
+      allow update, delete: if false;
+    }
+  }
+}

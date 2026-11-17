@@ -1,0 +1,451 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Non-PII registry account and authoritative RBAC role for a signed-in Anagu user.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID matching the document ID."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "User display name shown in registry audit trails."
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional avatar URL from Google Auth."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["CITIZEN", "SURVEYOR", "LAND_ADMIN", "REGISTRAR", "GOVERNOR"],
+          "description": "Authoritative statutory role enforced by Firestore security rules."
+        },
+        "requestedRole": {
+          "type": "string",
+          "enum": ["NONE", "CITIZEN", "SURVEYOR", "LAND_ADMIN", "REGISTRAR", "GOVERNOR"],
+          "description": "Optional role upgrade requested by the user for admin review."
+        },
+        "walletAddress": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional Ethereum/Besu address associated with the account."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of initial registration."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last profile or role update."
+        }
+      },
+      "required": ["uid", "displayName", "role", "requestedRole", "createdAt", "updatedAt"]
+    },
+    "UserPrivateContact": {
+      "title": "UserPrivateContact",
+      "description": "Isolated PII contact details for a user, restricted strictly to the owner and admins.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Owner Firebase Auth UID."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160,
+          "description": "Verified email address."
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Telephone number."
+        },
+        "address": {
+          "type": "string",
+          "maxLength": 240,
+          "description": "Residential or institutional contact address."
+        },
+        "nin": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "National Identification Number or Corporate RC number."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": ["uid", "email", "updatedAt"]
+    },
+    "ParcelRecord": {
+      "title": "ParcelRecord",
+      "description": "Public/statutory cadastral land parcel record without sensitive applicant contact PII.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique parcel identifier."
+        },
+        "titleNumber": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 64,
+          "description": "Official Anagu title reference number."
+        },
+        "applicantUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the user who submitted the application."
+        },
+        "applicantName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120,
+          "description": "Legal name of applicant or titleholder."
+        },
+        "applicantIdMasked": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32,
+          "description": "Masked identity reference for public title verification."
+        },
+        "applicantWalletAddress": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 64,
+          "description": "Applicant blockchain wallet address."
+        },
+        "locationName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 160,
+          "description": "Cadastral sector or plot location description."
+        },
+        "lga": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80,
+          "description": "Local Government Area."
+        },
+        "state": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "description": "State or Federal Capital Territory."
+        },
+        "coordinates": {
+          "type": "array",
+          "description": "Polygon boundary vertices stored as {lng, lat} map objects."
+        },
+        "areaSqm": {
+          "type": "number",
+          "description": "Calculated parcel area in square meters."
+        },
+        "perimeterMeters": {
+          "type": "number",
+          "description": "Calculated parcel perimeter in meters."
+        },
+        "spatialHash": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 128,
+          "description": "Cryptographic digest of the WGS 84 polygon geometry."
+        },
+        "documentHash": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 128,
+          "description": "SHA-256 digest of the supporting survey deed."
+        },
+        "landUse": {
+          "type": "string",
+          "enum": ["Residential", "Commercial", "Agricultural", "Industrial", "Public Reserve"],
+          "description": "Statutory land use classification."
+        },
+        "deedReference": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 80,
+          "description": "Statutory deeds archive reference code."
+        },
+        "customaryClan": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120,
+          "description": "Customary council authority."
+        },
+        "communityElderAttestation": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 300,
+          "description": "Attestation summary from customary council."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "DRAFT",
+            "SUBMITTED",
+            "SPATIAL_VERIFIED",
+            "ORACLE_VERIFIED",
+            "LEGAL_VERIFIED",
+            "APPROVED",
+            "BLOCKCHAIN_CONFIRMED",
+            "NFT_ISSUED",
+            "REVOKED",
+            "REJECTED",
+            "CANCELLED"
+          ],
+          "description": "Current stage in the 8-stage Anagu land registration pipeline."
+        },
+        "rejectionReason": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional reason when status is REJECTED."
+        },
+        "nftTokenId": {
+          "type": "number",
+          "description": "ERC-721 LandTitleNFT token identifier once issued."
+        },
+        "blockchainTxHash": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Ledger transaction hash for NFT issuance."
+        },
+        "isRevoked": {
+          "type": "boolean",
+          "description": "Whether title has been statutorily revoked under Section 28."
+        },
+        "revocationData": {
+          "type": "object",
+          "description": "Section 28 Governor revocation proclamation details."
+        },
+        "documentAttachment": {
+          "type": "object",
+          "description": "Metadata of uploaded survey plan hashed via Web Crypto."
+        },
+        "surveyBeacons": {
+          "type": "array",
+          "description": "Captured GPS field beacon coordinates as {beaconNumber, lng, lat, accuracyMeters, recordedAt}."
+        },
+        "signatureProof": {
+          "type": "object",
+          "description": "Applicant Web3 cryptographic signature proof."
+        },
+        "timeline": {
+          "type": "array",
+          "description": "Bounded workflow stage audit events (max 20 entries)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of parcel creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest state transition."
+        }
+      },
+      "required": [
+        "id",
+        "titleNumber",
+        "applicantUid",
+        "applicantName",
+        "applicantIdMasked",
+        "applicantWalletAddress",
+        "locationName",
+        "lga",
+        "state",
+        "coordinates",
+        "areaSqm",
+        "perimeterMeters",
+        "spatialHash",
+        "documentHash",
+        "landUse",
+        "deedReference",
+        "customaryClan",
+        "communityElderAttestation",
+        "status",
+        "isRevoked",
+        "timeline",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ParcelPrivateApplicant": {
+      "title": "ParcelPrivateApplicant",
+      "description": "Sensitive applicant PII for a parcel filing, accessible only to the applicant and verified registry officials.",
+      "type": "object",
+      "properties": {
+        "applicantUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the parcel applicant."
+        },
+        "applicantIdNumber": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "description": "Full NIN or RC corporate registration number."
+        },
+        "applicantAddress": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 240,
+          "description": "Applicant contact address."
+        },
+        "applicantPhone": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40,
+          "description": "Applicant telephone number."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of update."
+        }
+      },
+      "required": ["applicantUid", "applicantIdNumber", "applicantAddress", "applicantPhone", "updatedAt"]
+    },
+    "PendingQueueIndex": {
+      "title": "PendingQueueIndex",
+      "description": "Operational index of pending parcel IDs awaiting official verification, eliminating get() lookups in list queries.",
+      "type": "object",
+      "properties": {
+        "parcelIds": {
+          "type": "array",
+          "description": "Bounded list of parcel IDs currently under review."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest queue update."
+        }
+      },
+      "required": ["parcelIds", "updatedAt"]
+    },
+    "LedgerEvent": {
+      "title": "LedgerEvent",
+      "description": "Immutable public ledger record for issued Title NFTs and Section 28 revocations.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Event document ID."
+        },
+        "parcelId": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Related parcel ID."
+        },
+        "titleNumber": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 64,
+          "description": "Title reference number."
+        },
+        "tokenId": {
+          "type": "number",
+          "description": "ERC-721 Token ID."
+        },
+        "method": {
+          "type": "string",
+          "enum": ["MINT_TITLE_NFT", "REVOKE_TITLE_SEC28", "TRANSFER_TITLE_NFT"],
+          "description": "Contract execution method."
+        },
+        "txHash": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 128,
+          "description": "Transaction hash."
+        },
+        "blockNumber": {
+          "type": "number",
+          "description": "Ledger block number."
+        },
+        "actorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of authorized official executing the transaction."
+        },
+        "isPublicLedger": {
+          "type": "boolean",
+          "description": "Marks public audit visibility."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of ledger event."
+        }
+      },
+      "required": [
+        "id",
+        "parcelId",
+        "titleNumber",
+        "tokenId",
+        "method",
+        "txHash",
+        "blockNumber",
+        "actorUid",
+        "isPublicLedger",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles and authoritative statutory RBAC roles."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateContact" },
+      "description": "Isolated PII contact details owned by each user."
+    },
+    "/parcels/{parcelId}": {
+      "schema": { "$ref": "#/entities/ParcelRecord" },
+      "description": "Cadastral parcel records and 8-stage workflow state."
+    },
+    "/parcels/{parcelId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/ParcelPrivateApplicant" },
+      "description": "Isolated applicant PII (NIN, phone, address) linked to a parcel."
+    },
+    "/registry/{docId}": {
+      "schema": { "$ref": "#/entities/PendingQueueIndex" },
+      "description": "Pending verification queue index document ('pendingQueue') for officials."
+    },
+    "/ledgerEvents/{eventId}": {
+      "schema": { "$ref": "#/entities/LedgerEvent" },
+      "description": "Append-only NFT issuance and Section 28 statutory revocation ledger events."
+    }
+  }
+}
